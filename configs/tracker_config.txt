@@ -1,0 +1,16 @@
+%YAML:1.0
+
+NvDCF:
+  maxTargetsPerStream: 50
+  minDetectorConfidence: 0.2
+  trackerWidth: 640
+  trackerHeight: 384
+  gpuId: 0
+  enableBatchProcessing: 1
+  enablePastFrame: 0
+  useBufferedOutput: 0
+  
+  # ID Stability Enhancement
+  minMatchingScore: 0.8
+  probationAge: 10
+  minTrackerConfidence: 0.7

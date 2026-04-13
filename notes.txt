@@ -1,0 +1,12 @@
+sudo rm -rf logs/ utils/__pycache__/ __pycache__/ debug/
+
+sudo rm -rf logs/ utils/__pycache__/ __pycache__/ debug/libs/ model_repo/ libs
+
+
+docker compose up
+
+ python tools/setup_roi.py --camera_name entry_camera
+
+ python tools/setup_direction.py --camera_name entry_camera
+
+

@@ -1,0 +1,278 @@
+{
+  "application": {
+    "site_name": "DeepStream-ITMS-Production-v1",
+    "log_level": "INFO",
+    "show_video": true,
+    "draw_inference": true,
+    "Collect_full_images": true,
+    "send_evidence_clip": true,
+    "video_frame_buffer_size": 30,
+    "log_path": "logs/",
+    "verbose": false,
+    "testing": true,
+    "environment": "dev",
+    "disabled_violations": {
+      "all_camera": [
+        "drinking"
+      ]
+    }
+  },
+  "pipeline": {
+    "nvbuf_memory_type": 3,
+    "allowed_classes": [
+      2,
+      3,
+      5,
+      7
+    ],
+    "inference_interval": 4,
+    "tiler_resolution": [
+      1920,
+      1080
+    ],
+    "source_resolution": [
+      1280,
+      720
+    ],
+    "max_plate_batch_size": 30,
+    "ocr_chunk_size": 40,
+    "OCR_QUEUE_MAXSIZE": 50,
+    "track_accumulation_limit": 40,
+    "ocr_padding": 250
+  },
+  "models": {
+    "pgie": "configs/pgie_config.txt",
+    "tracker": "configs/tracker_itms_pro.txt",
+    "sgie_car": "configs/sgie_car.txt",
+    "sgie_bike": "configs/sgie_bike.txt",
+    "sgie_ocr": "configs/sgie_ocr.txt",
+    "ocr_labels": "0123456789ABCDEFGHJKLMNPQRSTUVWXYZIO",
+    "validate_indian_plate": false,
+    "min_plate_length": 2,
+    "conf_thresholds": {
+      "primary": 0.4,
+      "secondary": 0.4,
+      "ocr": 0.4,
+      "min_plate_confidence": 0.4,
+      "min_vehicle_confidence": 0.4
+    },
+    "secondary_models": {
+      "car": {
+        "classes": [
+          "plate",
+          "seatbelt",
+          "no_seatbelt",
+          "mobile_phone_usage",
+          "drinking",
+          "make"
+        ],
+        "reportable": [
+          "no_seatbelt",
+          "mobile_phone_usage",
+          "drinking"
+        ]
+      },
+      "motorcycle": {
+        "classes": [
+          "plate",
+          "helmet",
+          "no_helmet",
+          "mobile_phone_usage"
+        ],
+        "reportable": [
+          "no_helmet",
+          "mobile_phone_usage"
+        ]
+      }
+    }
+  },
+  "crop_padding": {
+    "pad_top": 200,
+    "pad_bottom": 200,
+    "pad_left": 200,
+    "pad_right": 200,
+    "motorcycle_pad_top": 300
+  },
+  "itms_logic": {
+    "max_crops_per_vehicle": 30,
+    "ocr_consensus_enabled": true,
+    "violation_consensus_threshold": 0.6,
+    "violation_frequency_threshold": 0.3,
+    "deduplication": {
+      "enabled": true,
+      "cooldown_seconds": 300,
+      "similarity_threshold": 0.85
+    }
+  },
+  "violation_ids": {
+    "no_seatbelt": "d2373fcf-3cd7-48f3-889a-47be80da5632",
+    "mobile_phone_usage": "4",
+    "no_helmet": "cd12fdec-87f4-496d-a66d-1dd7f05e8a2e",
+    "triples": "0f12e08d-092b-4c06-8a7a-ab99f5d31a69",
+    "wrong_direction": "d33c29f7-4111-40e5-8da4-ac8786cce711",
+    "drinking": "5"
+  },
+  "outbound": {
+    "rabbitmq": {
+      "host": "64.227.151.23",
+      "port": 5672,
+      "username": "guest",
+      "password": "password",
+      "queue_name": "vehicle_entries"
+    },
+    "minio": {
+      "host": "itms-s3.katomaran.tech",
+      "username": "admin-itms",
+      "password": "admin-itms",
+      "bucket": "traffic-api",
+      "secure": true,
+      "public_url": "https://itms-s3.katomaran.tech",
+      "send_evidence_clip": true
+    },
+    "graylog": {
+      "enabled": true,
+      "endpoint": "graylog-api.katomaran.tech",
+      "port": 12201,
+      "facility": "itms-va-traffic",
+      "host": "itms-va-traffic"
+    }
+  },
+  "enabled_cameras": [
+    "entry_camera"
+  ],
+  "camera_url": {
+    "entry_camera": "videos/test1.mp4",
+    "test_entry": "videos/test1.mp4"
+  },
+  "camera_id": {
+    "entry_camera": "abe7ba6c-6c76-444f-9b0a-39d2a0e51abb",
+    "test_entry": "83dde245-5df6-4211-aa4d-cef91be9e9d1"
+  },
+  "direction_config": {
+    "entry_camera": {
+      "enabled": true,
+      "method": "zone_transition",
+      "roi": [
+        [
+          0.1922,
+          0.2333
+        ],
+        [
+          0.732,
+          0.2083
+        ],
+        [
+          0.9961,
+          0.6083
+        ],
+        [
+          0.9945,
+          0.9875
+        ],
+        [
+          0.0023,
+          0.9972
+        ]
+      ],
+      "zone_a": [
+        [
+          0.2,
+          0.2347
+        ],
+        [
+          0.7406,
+          0.2222
+        ],
+        [
+          0.868,
+          0.4097
+        ],
+        [
+          0.1602,
+          0.4542
+        ]
+      ],
+      "zone_b": [
+        [
+          0.1562,
+          0.4556
+        ],
+        [
+          0.8672,
+          0.4083
+        ],
+        [
+          0.9977,
+          0.6014
+        ],
+        [
+          0.9969,
+          0.9917
+        ],
+        [
+          0.0016,
+          0.9903
+        ]
+      ],
+      "mode": "entry"
+    },
+    "test_entry": {
+      "enabled": true,
+      "method": "zone_transition",
+      "roi": [
+        [
+          0.3641,
+          0.0069
+        ],
+        [
+          0.2086,
+          0.9958
+        ],
+        [
+          0.9969,
+          0.9944
+        ],
+        [
+          0.9977,
+          0.0028
+        ]
+      ],
+      "zone_a": [
+        [
+          0.2648,
+          0.5875
+        ],
+        [
+          0.9984,
+          0.4181
+        ],
+        [
+          0.9977,
+          0.9944
+        ],
+        [
+          0.2094,
+          0.9958
+        ]
+      ],
+      "zone_b": [
+        [
+          0.3375,
+          0.0653
+        ],
+        [
+          0.9961,
+          0.0639
+        ],
+        [
+          0.9977,
+          0.4153
+        ],
+        [
+          0.2703,
+          0.5819
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+plate
+seatbelt
+no_seatbelt
+mobile_phone_usage
+drinking
+make

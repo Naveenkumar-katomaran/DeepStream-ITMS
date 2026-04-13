@@ -1,0 +1,7 @@
+logs/
+utils/__pycache__/
+__pycache__/
+debug/
+libs/
+model_repo/
+videos/

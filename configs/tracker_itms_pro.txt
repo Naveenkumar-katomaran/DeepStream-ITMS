@@ -1,0 +1,32 @@
+%YAML:1.0
+
+NvDCF:
+  # [GENERAL]
+  maxTargetsPerStream: 100
+  minDetectorConfidence: 0.15 # Filter out noisy detections earlier
+  trackerWidth: 640
+  trackerHeight: 384
+  gpuId: 0
+  enableBatchProcessing: 1
+
+  # [ID STABILIZATION]
+  # enablePastFrame: Re-associates objects lost during occlusion (Crucial for ITMS)
+  enablePastFrame: 1
+  # useBufferedOutput: Prevents jittery IDs by smoothing results over a window
+  useBufferedOutput: 1
+  
+  # [DATA ASSOCIATION]
+  # minTrackerConfidence: Minimum confidence to consider a track 'alive'
+  minTrackerConfidence: 0.5
+  # probationAge: Frames before a new track is considered 'solid'
+  probationAge: 10
+  # maxShadowTrackingAge: Frames to keep tracking an object after it's lost by the detector
+  maxShadowTrackingAge: 60
+  # earlyTerminationAge: Quick cleanup for ghosts
+  earlyTerminationAge: 1
+
+  # [SPATIAL CONSTRAINTS]
+  # Tuning for faster highway speeds
+  searchRegionPadding: 0.8
+  minIouDiffToUpdate: 0.2
+  minVisibilityScore: 0.2
