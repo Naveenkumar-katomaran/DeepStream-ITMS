@@ -2,7 +2,7 @@
   "application": {
     "site_name": "DeepStream-ITMS-Production-v1",
     "log_level": "INFO",
-    "show_video": true,
+    "show_video": false,
     "draw_inference": true,
     "Collect_full_images": true,
     "send_evidence_clip": true,

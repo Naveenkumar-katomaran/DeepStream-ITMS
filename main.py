@@ -316,18 +316,27 @@ def main():
     sink_logic = Gst.ElementFactory.make("fakesink", "sink-logic")
 
     # Display Branch elements (Standard GUI Dashboard)
+    show_video = config["application"].get("show_video", False)
     tee = Gst.ElementFactory.make("tee", "nvs-tee")
     queue_display = Gst.ElementFactory.make("queue", "queue-display")
-    tiler = Gst.ElementFactory.make("nvmultistreamtiler", "nvtiler")
-    nvvidconv_display = Gst.ElementFactory.make("nvvideoconvert", "nvvidconv-display")
-    nvosd = Gst.ElementFactory.make("nvdsosd", "nvosd")
-    sink_display = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
-    sink_display.set_property("sync", 0)  # Do not block X11 vsync
+    
+    if show_video:
+        tiler = Gst.ElementFactory.make("nvmultistreamtiler", "nvtiler")
+        nvvidconv_display = Gst.ElementFactory.make("nvvideoconvert", "nvvidconv-display")
+        nvosd = Gst.ElementFactory.make("nvdsosd", "nvosd")
+        sink_display = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+        sink_display.set_property("sync", 0)  # Do not block X11 vsync
+    else:
+        sink_display = Gst.ElementFactory.make("fakesink", "sink-display-fake")
+        sink_display.set_property("sync", 0)
 
     if not all([streammux, pgie, tracker, tee, queue_logic, 
-                nvvidconv_probe, caps_probe, sink_logic, queue_display, tiler, 
-                nvvidconv_display, nvosd, sink_display]):
+                nvvidconv_probe, caps_probe, sink_logic, queue_display, sink_display]):
         sys.stderr.write(" Unable to create one or more elements \n")
+        return
+    
+    if show_video and not all([tiler, nvvidconv_display, nvosd]):
+        sys.stderr.write(" Unable to create display elements \n")
         return
 
     # Config Elements
@@ -353,12 +362,13 @@ def main():
     tracker.set_property("ll-lib-file", "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so")
 
     # Tiler setup (Match Reference)
-    tiler_rows = int(np.sqrt(len(config.get("enabled_cameras", []))))
-    tiler_cols = int(np.ceil(len(config.get("enabled_cameras", [])) / tiler_rows))
-    tiler.set_property("rows", tiler_rows)
-    tiler.set_property("columns", tiler_cols)
-    tiler.set_property("width", 1920)
-    tiler.set_property("height", 1080)
+    if show_video:
+        tiler_rows = int(np.sqrt(len(config.get("enabled_cameras", []))))
+        tiler_cols = int(np.ceil(len(config.get("enabled_cameras", [])) / tiler_rows))
+        tiler.set_property("rows", tiler_rows)
+        tiler.set_property("columns", tiler_cols)
+        tiler.set_property("width", 1920)
+        tiler.set_property("height", 1080)
 
     # Logic branch memory type should be Unified (3) for stable pyds access on dGPU
     nvvidconv_probe.set_property("nvbuf-memory-type", 3)
@@ -379,10 +389,11 @@ def main():
     pipeline.add(sink_logic)
     
     pipeline.add(queue_display)
-    pipeline.add(tiler)
-    pipeline.add(nvvidconv_display)
-    pipeline.add(nvosd)
     pipeline.add(sink_display)
+    if show_video:
+        pipeline.add(tiler)
+        pipeline.add(nvvidconv_display)
+        pipeline.add(nvosd)
 
     # Link Sources
     for i, cam_name in enumerate(config.get("enabled_cameras", [])):
@@ -415,25 +426,20 @@ def main():
     caps_probe.link(sink_logic)
 
     # Link Display Branch (src_1)
-    if config["application"].get("show_video", False):
+    # Link Display Branch (src_1)
+    tee_src_pad_display = tee.request_pad_simple("src_%u")
+    queue_display_sink_pad = queue_display.get_static_pad("sink")
+    tee_src_pad_display.link(queue_display_sink_pad)
+    
+    if show_video:
         logging.info("📺 [STARTUP] Linking Display Branch (Tiler + OSD + EGL)...")
-        tee_src_pad_display = tee.request_pad_simple("src_%u")
-        queue_display_sink_pad = queue_display.get_static_pad("sink")
-        tee_src_pad_display.link(queue_display_sink_pad)
-        
         queue_display.link(tiler)
         tiler.link(nvvidconv_display)
         nvvidconv_display.link(nvosd)
         nvosd.link(sink_display)
     else:
         logging.info("🙈 [STARTUP] Side-loading Display Branch into fakesink (Headless)...")
-        sink_display_fake = Gst.ElementFactory.make("fakesink", "sink-display-fake")
-        pipeline.add(sink_display_fake)
-        
-        tee_src_pad_display = tee.request_pad_simple("src_%u")
-        queue_display_sink_pad = queue_display.get_static_pad("sink")
-        tee_src_pad_display.link(queue_display_sink_pad)
-        queue_display.link(sink_display_fake)
+        queue_display.link(sink_display)
 
     logging.info("✅ [STARTUP] All elements linked successfully.")
 

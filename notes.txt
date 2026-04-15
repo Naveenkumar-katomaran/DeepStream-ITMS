@@ -10,3 +10,19 @@ docker compose up
  python tools/setup_direction.py --camera_name entry_camera
 
 
+
+
+
+
+git init
+git add .
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/Naveenkumar-katomaran/DeepStream-ITMS.git
+git push -u origin main
+
+
+
+
+
+
