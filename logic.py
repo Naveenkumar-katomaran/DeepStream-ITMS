@@ -13,6 +13,12 @@ class LogicEngine:
         
         self._load_config()
 
+    def update_resolution(self, cam_name, fw, fh):
+        """Called when a camera resolution change is detected."""
+        logging.warning(f"[Logic] Resolution update for {cam_name}: {fw}x{fh}. Polygons remain relative.")
+        # If we had pixel-based polygons, we would re-calculate them here.
+        # Since we use relative (0.0-1.0), normalization in check_polygons handles it.
+
     def _load_config(self):
         dir_cfg = self.config.get("direction_config", {})
         enabled_cams = self.config.get("enabled_cameras", [])

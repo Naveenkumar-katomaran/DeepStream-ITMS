@@ -97,6 +97,11 @@ class OCRWorker:
                 
                 target_engine = self.engines.get(v_type)
                 
+                # Default assignments to prevent UnboundLocalError
+                vehicle_img = best_vehicle_crop
+                plate_img = best_plate_crop
+                plate_meta = {}
+                
                 # --- STAGE 2: ASYNCHRONOUS BURST INFERENCE (Pass 2) ---
                 if target_engine and item.get("frame_buffer") and item.get("bbox_list"):
 

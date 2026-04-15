@@ -22,28 +22,51 @@ api_submitter = None
 evidence_worker = None
 ocr_worker = None
 source_id_map = {} # {id: name}
+source_bin_map = {} # {name: bin}
+source_fail_counts = {} # {name: int}
+source_resolutions = {} # {name: (w, h)}
 batch_engine = None
 ALLOWED_CLASSES = [2, 3, 5, 7] 
 # Global counter for periodic cleanup
 probe_frame_count = 0 
-
-def bus_call(bus, message, loop):
+pipeline_ptr = None
+def bus_call(bus, message, user_data):
+    loop, pipeline = user_data
     t = message.type
     if t == Gst.MessageType.EOS:
-        logging.info("🏁 [Pipeline] End-of-stream reached.")
+        # We handle per-source looping via probes now, so global EOS means all is done.
+        # However, since we drop EOS in probes, this global EOS may only trigger on manual shutdown.
+        logging.info("🏁 [Pipeline] Global End-of-stream reached.")
         loop.quit()
     elif t == Gst.MessageType.WARNING:
         err, debug = message.parse_warning()
         logging.warning(f"⚠️ [GStreamer Warning] {message.src.get_name()}: {err} | Debug: {debug}")
     elif t == Gst.MessageType.ERROR:
         err, debug = message.parse_error()
-        logging.error(f"❌ [GStreamer ERROR] {message.src.get_name()}: {err}")
-        logging.error(f"🔍 [Debug Info] {debug}")
+        src_name = message.src.get_name()
+        logging.error(f"❌ [GStreamer ERROR] {src_name}: {err}")
         
-        # If the error is from the display sink, we try to keep logic running
-        if "renderer" in message.src.get_name() or "egl" in message.src.get_name():
+        # Identify if error is from a specific source bin
+        found_cam = None
+        for cam_name, s_bin in source_bin_map.items():
+            if s_bin.get_name() in src_name or (message.src.get_parent() and s_bin.get_name() in message.src.get_parent().get_name()):
+                found_cam = cam_name
+                break
+        
+        if found_cam:
+            source_fail_counts[found_cam] += 1
+            f_count = source_fail_counts[found_cam]
+            logging.warning(f"🔄 [Recovery] Source '{found_cam}' failed ({f_count}/5). Attempting independent restart...")
+            
+            if f_count <= 5:
+                # Independent source restart logic: toggle state
+                source_bin_map[found_cam].set_state(Gst.State.NULL)
+                GLib.timeout_add_seconds(2, source_bin_map[found_cam].set_state, Gst.State.PLAYING)
+            else:
+                logging.error(f"💀 [Recovery] Source '{found_cam}' reached max retries. System will continue with others.")
+                # We don't quit the loop, just keep running for remaining cameras
+        elif "renderer" in src_name or "egl" in src_name:
             logging.critical("‼️ Visual Dashboard failed, but attempting to maintain Logic Branch...")
-            # Set the failed element to NULL state to prevent it from stalling the pipeline
             message.src.set_state(Gst.State.NULL)
         else:
             logging.critical("💀 Fatal Pipeline Error. Shutting down.")
@@ -54,6 +77,21 @@ def bus_call(bus, message, loop):
             old_state, new_state, pending_state = message.parse_state_changed()
             logging.info(f"🔄 [Pipeline] State changed from {old_state.value_nick.upper()} to {new_state.value_nick.upper()}")
     return True
+
+def source_eos_probe(pad, info, u_data):
+    """
+    Independent Looping Probe:
+    Catches EOS events at the source level, performs a seek-to-start,
+    and drops the event so downstream (muxer/pgie) never stops.
+    """
+    event = info.get_event()
+    if event and event.type == Gst.EventType.EOS:
+        cam_name, bin_element = u_data
+        logging.info(f"🏁 [Looping] Source '{cam_name}' reached end of file. Restarting...")
+        # Perform a flushing seek to jump back to time 0
+        bin_element.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, 0)
+        return Gst.PadProbeReturn.DROP
+    return Gst.PadProbeReturn.OK
 
 def cb_newpad(decodebin, decoder_src_pad, data):
     caps = decoder_src_pad.get_current_caps()
@@ -75,7 +113,10 @@ def decodebin_child_added(child_proxy, Object, name, user_data):
         Object.connect("child-added", decodebin_child_added, user_data)
     if name.find("rtspsrc") != -1:
         Object.set_property("protocols", 0x00000004) # TCP
-    # Force software decoding — nvv4l2decoder fails on RTX 5060 (Blackwell) inside Docker
+        Object.set_property("latency", 500) # ms
+        Object.set_property("tcp-timeout", 5000000) # 5s in microseconds
+        Object.set_property("drop-on-latency", True)
+    # Force hardware decoding where possible
     if name.find("nvv4l2decoder") != -1:
         try:
             Object.set_property("drop-frame-interval", 0)
@@ -156,6 +197,14 @@ def pgie_src_pad_buffer_probe(pad, info, u_data):
 
             if frame_meta.frame_num % 1000 == 0:
                 logging.info(f"[Calibrate] Cam:{cam_name} | Buffer:{fw_buf}x{fh_buf} | Source:{fw_src}x{fh_src}")
+            
+            # Resolution Recovery check
+            last_res = source_resolutions.get(cam_name)
+            if last_res and (fw_src != last_res[0] or fh_src != last_res[1]):
+                logging.warning(f"🔄 [Recovery] Resolution changed for {cam_name}: {last_res} -> ({fw_src}, {fh_src})")
+                if logic_engine:
+                    logic_engine.update_resolution(cam_name, fw_src, fh_src)
+            source_resolutions[cam_name] = (fw_src, fh_src)
         except Exception as e:
             logging.error(f"[Probe] Error mapping buffer: {str(e)}")
             continue
@@ -259,7 +308,7 @@ def pgie_src_pad_buffer_probe(pad, info, u_data):
     return Gst.PadProbeReturn.OK
 
 def main():
-    global logic_engine, api_submitter, ocr_worker, config
+    global logic_engine, api_submitter, ocr_worker, config, pipeline_ptr
     print("🚀 [STARTUP] ITMS Pipeline Initializing...")
     
     if not os.path.exists("config.json"):
@@ -299,6 +348,7 @@ def main():
     logging.info("✅ [STARTUP] GStreamer Initialized.")
     
     pipeline = Gst.Pipeline()
+    pipeline_ptr = pipeline
     if not pipeline:
         sys.stderr.write(" Unable to create Pipeline \n")
         return
@@ -405,6 +455,13 @@ def main():
             uri = "file://" + os.path.abspath(uri)
             
         source_bin = create_source_bin(i, uri)
+        source_bin_map[cam_name] = source_bin
+        source_fail_counts[cam_name] = 0
+        
+        # Attach Independent Looping Probe
+        src_pad = source_bin.get_static_pad("src")
+        src_pad.add_probe(Gst.PadProbeType.EVENT_BOTH, source_eos_probe, (cam_name, source_bin))
+        
         pipeline.add(source_bin)
         padname = "sink_%u" % i
         sinkpad = streammux.get_request_pad(padname)
@@ -458,7 +515,7 @@ def main():
     loop = GLib.MainLoop()
     bus = pipeline.get_bus()
     bus.add_signal_watch()
-    bus.connect("message", bus_call, loop)
+    bus.connect("message", bus_call, (loop, pipeline))
 
     logging.info("🚀 [STARTUP] Pipeline starting MainLoop...")
     pipeline.set_state(Gst.State.PLAYING)

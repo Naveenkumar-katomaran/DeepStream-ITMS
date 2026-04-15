@@ -44,7 +44,7 @@ infer_config {
 }
 input_control {
   process_mode: PROCESS_MODE_FULL_FRAME
-  interval: 4
+  interval: 0
 }
 output_control {
   output_tensor_meta: true
